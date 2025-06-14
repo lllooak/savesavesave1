@@ -1,32 +1,47 @@
 import { supabase } from './supabase';
 
-// Function to send a welcome email using Supabase Edge Function
+// Function to send a welcome email using the Resend API directly
 export async function sendWelcomeEmail(email: string, name: string) {
   try {
-    // Use Supabase Edge Function instead of direct API call
-    const { data, error } = await supabase.functions.invoke('send-welcome-email', {
-      body: {
-        email,
-        name: name || 'משתמש יקר'
-      }
+    const apiKey = import.meta.env.VITE_RESEND_API_KEY;
+    const fromEmail = import.meta.env.VITE_RESEND_FROM_EMAIL;
+
+    if (!apiKey || !fromEmail) {
+      console.error('Resend API not configured:', { 
+        hasApiKey: !!apiKey, 
+        hasFromEmail: !!fromEmail 
+      });
+      return { 
+        success: false, 
+        error: { message: 'Resend API not configured' } 
+      };
+    }
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: email,
+        subject: 'ברוך הבא ל-MyStar!',
+        html: `<div dir="rtl">
+  <h1>ברוך הבא ל-MyStar, ${name || 'משתמש יקר'}!</h1>
+  <p>תודה שנרשמת לאתר. לחץ <a href="https://mystar.co.il">כאן</a> כדי להתחבר.</p>
+</div>`
+      })
     });
 
-    if (error) {
-      console.error('Edge function error:', error);
-      return { 
-        success: false, 
-        error: { message: error.message || 'שגיאה בשליחת אימייל ברכה' } 
-      };
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Error sending welcome email:', errorData);
+      return { success: false, error: errorData };
     }
 
-    if (data?.success) {
-      return { success: true, data };
-    } else {
-      return { 
-        success: false, 
-        error: { message: data?.error || 'שגיאה בשליחת אימייל ברכה' } 
-      };
-    }
+    const data = await response.json();
+    return { success: true, data };
   } catch (error) {
     console.error('Error in sendWelcomeEmail:', error);
     return { 
@@ -39,11 +54,8 @@ export async function sendWelcomeEmail(email: string, name: string) {
 // Function to send a verification email
 export async function resendVerificationEmail(email: string) {
   try {
-    // Get the base URL without any query parameters or hash
-    const baseUrl = window.location.origin;
-    
-    // Create a complete URL with the correct path
-    const redirectTo = `${baseUrl}/auth/callback`;
+    // Set the redirect URL to the production domain
+    const redirectTo = `https://mystar.co.il/auth/callback`;
 
     // Check if Supabase is properly configured
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
@@ -158,11 +170,8 @@ export async function sendPasswordResetEmail(email: string) {
       };
     }
 
-    // Get the base URL without any query parameters or hash
-    const baseUrl = window.location.origin;
-    
-    // Create a complete URL with the correct path
-    const redirectTo = `${baseUrl}/reset-password`;
+    // Set the redirect URL to the production domain
+    const redirectTo = `https://mystar.co.il/reset-password`;
 
     // Check if Supabase is properly configured
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {

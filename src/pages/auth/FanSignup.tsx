@@ -39,11 +39,14 @@ export function FanSignup() {
         throw new Error(error?.message || data?.error || 'Signup failed');
       }
       
-      await sendWelcomeEmail(form.email, form.name);
-      toast.success('Registration successful! Please check your email to verify your account.');
+      // Don't automatically sign in - wait for email verification
+      toast.success('Signup successful! Please check your email to verify your account.');
       
       // Redirect to login page with verification message
       navigate(`/login?verification=true&email=${encodeURIComponent(form.email)}`);
+      
+      // Send welcome email
+      await sendWelcomeEmail(form.email, form.name);
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     } finally {

@@ -16,7 +16,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
     persistSession: true,
     detectSessionInUrl: true, // Enable automatic detection of auth tokens in URL
     flowType: 'pkce', // Use PKCE flow for better security
-    // Set the site URL for redirects
+    // Set the site URL to the production domain
     site: 'https://mystar.co.il'
   },
   global: {

@@ -52,7 +52,7 @@ export function EmailConfirmation() {
           
           // Redirect to login after 3 seconds
           setTimeout(() => {
-            navigate('/login');
+            navigate('/');
           }, 3000);
           return;
         }
@@ -94,7 +94,7 @@ export function EmailConfirmation() {
               <p className="mt-2 text-gray-600">
                 {isRecovery 
                   ? 'אתה מועבר לדף איפוס הסיסמה...' 
-                  : 'תודה שאימתת את האימייל שלך. אתה מועבר לדף ההתחברות...'}
+                  : 'תודה שאימתת את האימייל שלך. אתה מועבר לדף הבית...'}
               </p>
             </>
           ) : (
@@ -104,10 +104,10 @@ export function EmailConfirmation() {
               <p className="mt-2 text-gray-600">{error || 'אירעה שגיאה בלתי צפויה. אנא נסה שוב מאוחר יותר.'}</p>
               <div className="mt-6">
                 <button
-                  onClick={() => navigate('/login')}
+                  onClick={() => navigate('/')}
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
-                  חזרה לדף ההתחברות
+                  חזרה לדף הבית
                 </button>
               </div>
             </>

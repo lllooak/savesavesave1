@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { sendWelcomeEmail } from '../../lib/emailService';
@@ -14,57 +14,6 @@ export function CreatorSignup() {
     category: '',
   });
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<{id: string, name: string, icon: string}[]>([]);
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  async function fetchCategories() {
-    try {
-      // Fetch categories from platform_config
-      const { data: configData, error: configError } = await supabase
-        .from('platform_config')
-        .select('value')
-        .eq('key', 'categories')
-        .maybeSingle();
-
-      if (configError) throw configError;
-
-      // Get admin categories or use default if none exist
-      const adminCategories = configData?.value?.categories || [];
-      
-      // Only use active categories
-      const activeCategories = adminCategories
-        .filter((cat: any) => cat.active)
-        .sort((a: any, b: any) => a.order - b.order);
-
-      // If no categories defined, use default categories
-      const defaultCategories = [
-        { id: '1', name: 'מוזיקאי', icon: '🎵' },
-        { id: '2', name: 'שחקן', icon: '🎭' },
-        { id: '3', name: 'קומיקאי', icon: '😂' },
-        { id: '4', name: 'ספורטאי', icon: '⚽' },
-        { id: '5', name: 'משפיען', icon: '📱' },
-        { id: '6', name: 'אמן', icon: '🎨' }
-      ];
-
-      setCategories(activeCategories.length > 0 
-        ? activeCategories.map((cat: any) => ({ id: cat.id, name: cat.name, icon: cat.icon }))
-        : defaultCategories);
-    } catch (error) {
-      console.error('שגיאה בטעינת קטגוריות:', error);
-      // Fallback to default categories
-      setCategories([
-        { id: '1', name: 'מוזיקאי', icon: '🎵' },
-        { id: '2', name: 'שחקן', icon: '🎭' },
-        { id: '3', name: 'קומיקאי', icon: '😂' },
-        { id: '4', name: 'ספורטאי', icon: '⚽' },
-        { id: '5', name: 'משפיען', icon: '📱' },
-        { id: '6', name: 'אמן', icon: '🎨' }
-      ]);
-    }
-  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -92,30 +41,19 @@ export function CreatorSignup() {
         throw new Error(error?.message || data?.error || 'Signup failed');
       }
       
-      await sendWelcomeEmail(form.email, form.name);
-      toast.success('Registration successful! Please check your email to verify your account.');
+      // Don't automatically sign in - wait for email verification
+      toast.success('Signup successful! Please check your email to verify your account.');
       
       // Redirect to login page with verification message
       navigate(`/login?verification=true&email=${encodeURIComponent(form.email)}`);
+      
+      // Send welcome email
+      await sendWelcomeEmail(form.email, form.name);
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Map Hebrew categories to English for database matching
-  const getCategoryValue = (hebrewName: string): string => {
-    const categoryMapping: Record<string, string> = {
-      'מוזיקאי': 'musician',
-      'שחקן': 'actor',
-      'קומיקאי': 'comedian',
-      'ספורטאי': 'athlete',
-      'משפיען': 'influencer',
-      'אמן': 'artist'
-    };
-    
-    return categoryMapping[hebrewName] || hebrewName.toLowerCase();
   };
 
   return (
@@ -176,14 +114,12 @@ export function CreatorSignup() {
                 disabled={loading}
               >
                 <option value="">בחר קטגוריה</option>
-                {categories.map((category) => (
-                  <option 
-                    key={category.id} 
-                    value={getCategoryValue(category.name)}
-                  >
-                    {category.icon} {category.name}
-                  </option>
-                ))}
+                <option value="musician">מוזיקאי</option>
+                <option value="actor">שחקן</option>
+                <option value="comedian">קומיקאי</option>
+                <option value="influencer">משפיען</option>
+                <option value="athlete">ספורטאי</option>
+                <option value="artist">אמן</option>
               </select>
             </div>
             <div>
