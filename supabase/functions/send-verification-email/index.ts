@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'npm:@supabase/supabase-js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -47,11 +48,16 @@ serve(async (req) => {
       )
     }
 
-    // Create Supabase client
-    const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+    // Create Supabase client with service role key
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
 
     // Send verification email
-    const { error } = await supabaseAdmin.auth.admin.generateLink({
+    const { error } = await supabase.auth.admin.generateLink({
       type: 'signup',
       email,
       options: {
@@ -82,47 +88,16 @@ serve(async (req) => {
       }
     )
   } catch (error) {
+    console.error('Error in send-verification-email function:', error)
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: error.message || 'An unexpected error occurred'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 500,
       }
     )
   }
 })
-
-// Helper to create Supabase client
-function createClient(supabaseUrl: string, supabaseKey: string) {
-  return {
-    auth: {
-      admin: {
-        generateLink: async ({ type, email, options }: { type: string, email: string, options?: { redirectTo?: string } }) => {
-          const url = `${supabaseUrl}/auth/v1/admin/generate-link`
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseKey}`,
-              'apikey': supabaseKey
-            },
-            body: JSON.stringify({
-              type,
-              email,
-              options
-            })
-          })
-
-          const data = await res.json()
-          if (!res.ok) {
-            return { error: data }
-          }
-          return { data }
-        }
-      }
-    }
-  }
-}

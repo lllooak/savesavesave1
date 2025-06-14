@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'npm:@supabase/supabase-js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,11 +45,16 @@ serve(async (req) => {
       )
     }
 
-    // Create Supabase client
-    const supabaseAdmin = createClient(supabaseUrl, supabaseKey)
+    // Create Supabase client with service role key
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
 
     // Create user with email confirmation
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: false, // Require email confirmation
@@ -77,12 +83,15 @@ serve(async (req) => {
 
     // Create user record in public schema
     const userId = authData.user.id
-    const { error: userError } = await createUserRecord(supabaseUrl, supabaseKey, {
-      id: userId,
-      email,
-      name,
-      role
-    })
+    
+    const { error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        email,
+        name,
+        role
+      })
 
     if (userError) {
       console.error('Error creating user record:', userError)
@@ -91,11 +100,16 @@ serve(async (req) => {
 
     // If role is creator, create creator profile
     if (role === 'creator' && category) {
-      const { error: creatorError } = await createCreatorProfile(supabaseUrl, supabaseKey, {
-        id: userId,
-        name,
-        category
-      })
+      const { error: creatorError } = await supabase
+        .from('creator_profiles')
+        .insert({
+          id: userId,
+          name,
+          category,
+          price: 100, // Default price
+          delivery_time: '24:00:00', // Default delivery time (24 hours)
+          social_links: {}
+        })
 
       if (creatorError) {
         console.error('Error creating creator profile:', creatorError)
@@ -104,7 +118,7 @@ serve(async (req) => {
     }
 
     // Send verification email with redirect to production domain
-    const { error: emailError } = await supabaseAdmin.auth.admin.generateLink({
+    const { error: emailError } = await supabase.auth.admin.generateLink({
       type: 'signup',
       email,
       options: {
@@ -128,112 +142,16 @@ serve(async (req) => {
       }
     )
   } catch (error) {
+    console.error('Error in register-user function:', error)
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: error.message || 'An unexpected error occurred'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 500,
       }
     )
   }
 })
-
-// Helper to create Supabase client
-function createClient(supabaseUrl: string, supabaseKey: string) {
-  return {
-    auth: {
-      admin: {
-        createUser: async (userData: any) => {
-          const url = `${supabaseUrl}/auth/v1/admin/users`
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseKey}`,
-              'apikey': supabaseKey
-            },
-            body: JSON.stringify(userData)
-          })
-
-          const data = await res.json()
-          if (!res.ok) {
-            return { error: data }
-          }
-          return { data }
-        },
-        generateLink: async ({ type, email, options }: { type: string, email: string, options?: { redirectTo?: string } }) => {
-          const url = `${supabaseUrl}/auth/v1/admin/generate-link`
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseKey}`,
-              'apikey': supabaseKey
-            },
-            body: JSON.stringify({
-              type,
-              email,
-              options
-            })
-          })
-
-          const data = await res.json()
-          if (!res.ok) {
-            return { error: data }
-          }
-          return { data }
-        }
-      }
-    }
-  }
-}
-
-// Helper to create user record in public schema
-async function createUserRecord(supabaseUrl: string, supabaseKey: string, userData: any) {
-  const url = `${supabaseUrl}/rest/v1/users`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${supabaseKey}`,
-      'apikey': supabaseKey,
-      'Prefer': 'return=minimal'
-    },
-    body: JSON.stringify(userData)
-  })
-
-  if (!res.ok) {
-    const error = await res.json()
-    return { error }
-  }
-  return { data: {} }
-}
-
-// Helper to create creator profile
-async function createCreatorProfile(supabaseUrl: string, supabaseKey: string, profileData: any) {
-  const url = `${supabaseUrl}/rest/v1/creator_profiles`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${supabaseKey}`,
-      'apikey': supabaseKey,
-      'Prefer': 'return=minimal'
-    },
-    body: JSON.stringify({
-      ...profileData,
-      price: 100, // Default price
-      delivery_time: '24:00:00', // Default delivery time (24 hours)
-      social_links: {}
-    })
-  })
-
-  if (!res.ok) {
-    const error = await res.json()
-    return { error }
-  }
-  return { data: {} }
-}
