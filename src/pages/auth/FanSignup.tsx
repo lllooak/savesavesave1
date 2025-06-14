@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { sendWelcomeEmail } from '../../lib/emailService';
 import toast from 'react-hot-toast';
 
 export function FanSignup() {
@@ -40,13 +39,10 @@ export function FanSignup() {
       }
       
       // Don't automatically sign in - wait for email verification
-      toast.success('Signup successful! Please check your email to verify your account.');
+      toast.success('הרשמה בוצעה בהצלחה! אנא בדוק את תיבת הדואר שלך לאימות החשבון.');
       
       // Redirect to login page with verification message
       navigate(`/login?verification=true&email=${encodeURIComponent(form.email)}`);
-      
-      // Send welcome email
-      await sendWelcomeEmail(form.email, form.name);
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     } finally {

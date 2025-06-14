@@ -1,29 +1,25 @@
 import { supabase } from './supabase';
 
-// Function to send a welcome email using Supabase Edge Function
+// Function to send a verification email instead of a welcome email
 export async function sendWelcomeEmail(email: string, name: string) {
   try {
-    // Use the Edge Function instead of direct API call
-    const { data, error } = await supabase.functions.invoke('send-welcome-email', {
-      body: { email, name }
+    // Use the Edge Function to send a verification email
+    const { data, error } = await supabase.functions.invoke('send-verification-email', {
+      body: { 
+        email, 
+        redirectTo: 'https://mystar.co.il/email-confirmation'
+      }
     });
 
     if (error) {
       console.error('Edge function error:', error);
       return { 
         success: false, 
-        error: { message: error.message || 'Failed to send welcome email' } 
+        error: { message: error.message || 'Failed to send verification email' } 
       };
     }
 
-    if (data?.success) {
-      return { success: true, data };
-    } else {
-      return { 
-        success: false, 
-        error: { message: data?.error || 'Unknown error occurred' } 
-      };
-    }
+    return data as { success: boolean; [key: string]: any };
   } catch (error) {
     console.error('Error in sendWelcomeEmail:', error);
     return { 

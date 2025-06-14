@@ -53,7 +53,7 @@ serve(async (req) => {
       }
     })
 
-    // Create user with email confirmation
+    // Create user with email confirmation required
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -117,7 +117,7 @@ serve(async (req) => {
       }
     }
 
-    // Send verification email with absolute URL to the production domain
+    // Send verification email with absolute URL to the email confirmation page
     const { error: emailError } = await supabase.auth.admin.generateLink({
       type: 'signup',
       email,
@@ -134,7 +134,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        userId
+        userId,
+        message: 'Verification email sent. Please check your inbox to confirm your email address.'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
