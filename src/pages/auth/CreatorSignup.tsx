@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { SignupSuccessMessage } from '../../components/SignupSuccessMessage';
 import toast from 'react-hot-toast';
 
 export function CreatorSignup() {
@@ -13,6 +14,7 @@ export function CreatorSignup() {
     category: '',
   });
   const [loading, setLoading] = useState(false);
+  const [signupComplete, setSignupComplete] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -27,30 +29,111 @@ export function CreatorSignup() {
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('register-user', {
-        body: {
-          email: form.email,
-          password: form.password,
-          name: form.name,
-          role: 'creator',
-          category: form.category,
-        },
+      // Register the user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            name: form.name,
+            role: 'creator',
+            category: form.category,
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
       });
-      if (error || !data?.success) {
-        throw new Error(error?.message || data?.error || 'Signup failed');
+
+      if (authError) {
+        throw authError;
       }
-      
-      // Don't automatically sign in - wait for email verification
-      toast.success('הרשמה בוצעה בהצלחה! אנא בדוק את תיבת הדואר שלך לאימות החשבון.');
-      
-      // Redirect to login page with verification message
-      navigate(`/login?verification=true&email=${encodeURIComponent(form.email)}`);
+
+      // Check if email confirmation is required
+      if (authData.user && !authData.user.confirmed_at) {
+        // Show success message with verification instructions
+        setSignupComplete(true);
+        toast.success('Registration successful! Please check your email to verify your account.');
+      } else {
+        // If email confirmation is not required, create creator profile
+        await createCreatorProfile(authData.user?.id);
+        toast.success('Signup successful');
+        navigate('/dashboard/creator');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
   };
+
+  const createCreatorProfile = async (userId: string | undefined) => {
+    if (!userId) return;
+    
+    try {
+      // Check if profile already exists
+      const { data: existingProfile } = await supabase
+        .from('creator_profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+        
+      if (existingProfile) {
+        console.log('Creator profile already exists');
+        return;
+      }
+      
+      // Create creator profile
+      const { error: profileError } = await supabase
+        .from('creator_profiles')
+        .insert({
+          id: userId,
+          name: form.name,
+          category: form.category,
+          bio: '',
+          price: 100, // Default price
+          active: true
+        });
+        
+      if (profileError) {
+        console.error('Error creating creator profile:', profileError);
+      }
+      
+      // Create user record if it doesn't exist
+      const { error: userError } = await supabase
+        .from('users')
+        .upsert({
+          id: userId,
+          email: form.email,
+          name: form.name,
+          role: 'creator'
+        });
+        
+      if (userError) {
+        console.error('Error creating user record:', userError);
+      }
+    } catch (error) {
+      console.error('Error in createCreatorProfile:', error);
+    }
+  };
+
+  if (signupComplete) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" dir="rtl">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">הרשמה הושלמה</h2>
+          </div>
+          
+          <SignupSuccessMessage email={form.email} />
+          
+          <div className="text-center">
+            <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
+              חזור לדף ההתחברות
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" dir="rtl">
@@ -100,23 +183,16 @@ export function CreatorSignup() {
               <label htmlFor="category" className="block text-sm font-medium text-gray-700">
                 קטגוריה
               </label>
-              <select
+              <input
                 id="category"
                 name="category"
+                type="text"
                 required
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm text-right text-gray-900"
                 value={form.category}
                 onChange={handleChange}
                 disabled={loading}
-              >
-                <option value="">בחר קטגוריה</option>
-                <option value="musician">מוזיקאי</option>
-                <option value="actor">שחקן</option>
-                <option value="comedian">קומיקאי</option>
-                <option value="influencer">משפיען</option>
-                <option value="athlete">ספורטאי</option>
-                <option value="artist">אמן</option>
-              </select>
+              />
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">

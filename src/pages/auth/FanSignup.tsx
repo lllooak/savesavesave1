@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { SignupSuccessMessage } from '../../components/SignupSuccessMessage';
 import toast from 'react-hot-toast';
 
 export function FanSignup() {
@@ -12,6 +13,7 @@ export function FanSignup() {
     confirm: '',
   });
   const [loading, setLoading] = useState(false);
+  const [signupComplete, setSignupComplete] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -26,29 +28,82 @@ export function FanSignup() {
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('register-user', {
-        body: {
-          email: form.email,
-          password: form.password,
-          name: form.name,
-          role: 'fan',
-        },
+      // Register the user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: {
+          data: {
+            name: form.name,
+            role: 'fan',
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
       });
-      if (error || !data?.success) {
-        throw new Error(error?.message || data?.error || 'Signup failed');
+
+      if (authError) {
+        throw authError;
       }
-      
-      // Don't automatically sign in - wait for email verification
-      toast.success('הרשמה בוצעה בהצלחה! אנא בדוק את תיבת הדואר שלך לאימות החשבון.');
-      
-      // Redirect to login page with verification message
-      navigate(`/login?verification=true&email=${encodeURIComponent(form.email)}`);
+
+      // Check if email confirmation is required
+      if (authData.user && !authData.user.confirmed_at) {
+        // Show success message with verification instructions
+        setSignupComplete(true);
+        toast.success('Registration successful! Please check your email to verify your account.');
+      } else {
+        // If email confirmation is not required, create user record
+        await createUserRecord(authData.user?.id);
+        toast.success('Signup successful');
+        navigate('/dashboard/fan');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     } finally {
       setLoading(false);
     }
   };
+
+  const createUserRecord = async (userId: string | undefined) => {
+    if (!userId) return;
+    
+    try {
+      // Create user record if it doesn't exist
+      const { error: userError } = await supabase
+        .from('users')
+        .upsert({
+          id: userId,
+          email: form.email,
+          name: form.name,
+          role: 'user'
+        });
+        
+      if (userError) {
+        console.error('Error creating user record:', userError);
+      }
+    } catch (error) {
+      console.error('Error in createUserRecord:', error);
+    }
+  };
+
+  if (signupComplete) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" dir="rtl">
+        <div className="max-w-md w-full space-y-8">
+          <div>
+            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">הרשמה הושלמה</h2>
+          </div>
+          
+          <SignupSuccessMessage email={form.email} />
+          
+          <div className="text-center">
+            <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500">
+              חזור לדף ההתחברות
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" dir="rtl">

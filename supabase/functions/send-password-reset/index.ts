@@ -1,5 +1,5 @@
+// Follow the edge function format
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'npm:@supabase/supabase-js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,7 +7,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // CORS preflight
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -19,8 +19,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Email is required',
-          code: 'invalid_email_format'
+          error: 'Email is required'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -29,19 +28,15 @@ serve(async (req) => {
       )
     }
 
-    // Use the production URL for redirect
-    const finalRedirectTo = redirectTo || 'https://mystar.co.il/reset-password'
+    // Get Supabase client from environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-    
-    if (!supabaseUrl || !supabaseKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Supabase credentials are not configured',
-          code: 'service_config_error'
+          error: 'Supabase environment variables not configured'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -50,38 +45,20 @@ serve(async (req) => {
       )
     }
 
-    // Create Supabase client with service role key
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+    // Create Supabase client
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
 
     // Send password reset email
-    const { error } = await supabase.auth.admin.generateLink({
+    const { error } = await supabaseClient.auth.admin.generateLink({
       type: 'recovery',
       email,
       options: {
-        redirectTo: finalRedirectTo
+        redirectTo: redirectTo || `${new URL(req.url).origin}/reset-password`
       }
     })
 
     if (error) {
-      // Check for rate limiting
-      if (error.message?.includes('rate limit') || error.message?.includes('Too many requests')) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            note: 'Rate limited but handled gracefully'
-          }),
-          {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          }
-        )
-      }
-
+      console.error('Error sending password reset email:', error)
       return new Response(
         JSON.stringify({
           success: false,
@@ -89,14 +66,15 @@ serve(async (req) => {
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
+          status: 500,
         }
       )
     }
 
     return new Response(
       JSON.stringify({
-        success: true
+        success: true,
+        message: 'Password reset email sent successfully'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -104,11 +82,11 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('Error in send-password-reset function:', error)
+    console.error('Error:', error)
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'An unexpected error occurred'
+        error: error.message
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -117,3 +95,35 @@ serve(async (req) => {
     )
   }
 })
+
+// Helper to create Supabase client
+function createClient(supabaseUrl: string, supabaseKey: string) {
+  return {
+    auth: {
+      admin: {
+        generateLink: async ({ type, email, options }: { type: string, email: string, options?: any }) => {
+          const url = `${supabaseUrl}/auth/v1/admin/generate_link`
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+              'apikey': supabaseKey
+            },
+            body: JSON.stringify({
+              type,
+              email,
+              options
+            })
+          })
+
+          const data = await response.json()
+          if (!response.ok) {
+            return { error: data }
+          }
+          return { data }
+        }
+      }
+    }
+  }
+}
