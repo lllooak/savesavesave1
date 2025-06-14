@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { SignupSuccessMessage } from '../../components/SignupSuccessMessage';
 import toast from 'react-hot-toast';
+
+interface Category {
+  id: string;
+  name: string;
+  icon: string;
+}
 
 export function CreatorSignup() {
   const navigate = useNavigate();
@@ -15,6 +21,62 @@ export function CreatorSignup() {
   });
   const [loading, setLoading] = useState(false);
   const [signupComplete, setSignupComplete] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      
+      // Fetch categories from platform_config
+      const { data: configData, error: configError } = await supabase
+        .from('platform_config')
+        .select('value')
+        .eq('key', 'categories')
+        .maybeSingle();
+
+      if (configError) throw configError;
+
+      // Get admin categories or use default if none exist
+      const adminCategories = configData?.value?.categories || [];
+      
+      // Only use active categories
+      const activeCategories = adminCategories
+        .filter((cat: any) => cat.active)
+        .sort((a: any, b: any) => a.order - b.order);
+
+      // If no categories defined, use default categories
+      const defaultCategories = [
+        { id: '1', name: 'מוזיקאי', icon: '🎵' },
+        { id: '2', name: 'שחקן', icon: '🎭' },
+        { id: '3', name: 'קומיקאי', icon: '😂' },
+        { id: '4', name: 'ספורטאי', icon: '⚽' },
+        { id: '5', name: 'משפיען', icon: '📱' },
+        { id: '6', name: 'אמן', icon: '🎨' }
+      ];
+
+      setCategories(activeCategories.length > 0 
+        ? activeCategories.map((cat: any) => ({ id: cat.id, name: cat.name, icon: cat.icon }))
+        : defaultCategories);
+    } catch (error) {
+      console.error('שגיאה בטעינת קטגוריות:', error);
+      // Fallback to default categories
+      setCategories([
+        { id: '1', name: 'מוזיקאי', icon: '🎵' },
+        { id: '2', name: 'שחקן', icon: '🎭' },
+        { id: '3', name: 'קומיקאי', icon: '😂' },
+        { id: '4', name: 'ספורטאי', icon: '⚽' },
+        { id: '5', name: 'משפיען', icon: '📱' },
+        { id: '6', name: 'אמן', icon: '🎨' }
+      ]);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -115,6 +177,20 @@ export function CreatorSignup() {
     }
   };
 
+  // Map Hebrew categories to English for database matching
+  const getCategoryValue = (hebrewName: string): string => {
+    const categoryMapping: Record<string, string> = {
+      'מוזיקאי': 'musician',
+      'שחקן': 'actor',
+      'קומיקאי': 'comedian',
+      'ספורטאי': 'athlete',
+      'משפיען': 'influencer',
+      'אמן': 'artist'
+    };
+    
+    return categoryMapping[hebrewName] || hebrewName.toLowerCase();
+  };
+
   if (signupComplete) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8" dir="rtl">
@@ -183,16 +259,32 @@ export function CreatorSignup() {
               <label htmlFor="category" className="block text-sm font-medium text-gray-700">
                 קטגוריה
               </label>
-              <input
-                id="category"
-                name="category"
-                type="text"
-                required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm text-right text-gray-900"
-                value={form.category}
-                onChange={handleChange}
-                disabled={loading}
-              />
+              {loadingCategories ? (
+                <div className="mt-1 flex items-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600 ml-2"></div>
+                  <span className="text-sm text-gray-500">טוען קטגוריות...</span>
+                </div>
+              ) : (
+                <select
+                  id="category"
+                  name="category"
+                  required
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm text-right text-gray-900"
+                  value={form.category}
+                  onChange={handleChange}
+                  disabled={loading}
+                >
+                  <option value="">בחר קטגוריה</option>
+                  {categories.map((category) => (
+                    <option 
+                      key={category.id} 
+                      value={getCategoryValue(category.name)}
+                    >
+                      {category.icon} {category.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
@@ -228,7 +320,7 @@ export function CreatorSignup() {
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || loadingCategories}
               className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
             >
               {loading ? 'נרשם...' : 'הרשמה כיוצר'}
