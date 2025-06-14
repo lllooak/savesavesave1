@@ -37,7 +37,7 @@ export async function sendWelcomeEmail(email: string, name: string) {
 export async function resendVerificationEmail(email: string) {
   try {
     // Set the redirect URL to the production domain
-    const redirectTo = `https://mystar.co.il/auth/callback`;
+    const redirectTo = `https://mystar.co.il/email-confirmation`;
 
     // Check if Supabase is properly configured
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {

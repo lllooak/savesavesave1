@@ -117,12 +117,12 @@ serve(async (req) => {
       }
     }
 
-    // Send verification email with redirect to production domain
+    // Send verification email with absolute URL to the production domain
     const { error: emailError } = await supabase.auth.admin.generateLink({
       type: 'signup',
       email,
       options: {
-        redirectTo: 'https://mystar.co.il/auth/callback'
+        redirectTo: 'https://mystar.co.il/email-confirmation'
       }
     })
 
