@@ -89,8 +89,11 @@ serve(async (req) => {
       );
     }
 
-    // Check if user exists before sending reset email
-    const { data: userData, error: userError } = await supabase.auth.admin.getUserByEmail(email);
+    // Check if user exists before sending reset email using listUsers with email filter
+    const { data: usersData, error: userError } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000
+    });
     
     if (userError) {
       console.error('Error checking user:', userError);
@@ -106,6 +109,9 @@ serve(async (req) => {
         }
       );
     }
+
+    // Filter users by email
+    const userData = usersData?.users?.find(user => user.email?.toLowerCase() === email.toLowerCase());
 
     if (!userData) {
       // User doesn't exist, but don't reveal this for security
