@@ -8,7 +8,7 @@ const corsHeaders = {
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
@@ -45,7 +45,7 @@ serve(async (req) => {
         subject: 'ברוך הבא ל-MyStar!',
         html: `<div dir="rtl">
           <h1>ברוך הבא ל-MyStar, ${name || 'משתמש יקר'}!</h1>
-          <p>תודה שנרשמת לאתר. לחץ <a href="${req.headers.get('origin') || 'https://mystar.co.il'}">כאן</a> כדי להתחבר.</p>
+          <p>תודה שנרשמת לאתר. לחץ <a href="https://mystar.co.il">כאן</a> כדי להתחבר.</p>
         </div>`
       })
     })
