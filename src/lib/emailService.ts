@@ -1,47 +1,29 @@
 import { supabase } from './supabase';
 
-// Function to send a welcome email using the Resend API directly
+// Function to send a welcome email using Supabase Edge Function
 export async function sendWelcomeEmail(email: string, name: string) {
   try {
-    const apiKey = import.meta.env.VITE_RESEND_API_KEY;
-    const fromEmail = import.meta.env.VITE_RESEND_FROM_EMAIL;
+    // Use the Edge Function instead of direct API call
+    const { data, error } = await supabase.functions.invoke('send-welcome-email', {
+      body: { email, name }
+    });
 
-    if (!apiKey || !fromEmail) {
-      console.error('Resend API not configured:', { 
-        hasApiKey: !!apiKey, 
-        hasFromEmail: !!fromEmail 
-      });
+    if (error) {
+      console.error('Edge function error:', error);
       return { 
         success: false, 
-        error: { message: 'Resend API not configured' } 
+        error: { message: error.message || 'Failed to send welcome email' } 
       };
     }
 
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: email,
-        subject: 'ברוך הבא ל-MyStar!',
-        html: `<div dir="rtl">
-  <h1>ברוך הבא ל-MyStar, ${name || 'משתמש יקר'}!</h1>
-  <p>תודה שנרשמת לאתר. לחץ <a href="https://mystar.co.il">כאן</a> כדי להתחבר.</p>
-</div>`
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Error sending welcome email:', errorData);
-      return { success: false, error: errorData };
+    if (data?.success) {
+      return { success: true, data };
+    } else {
+      return { 
+        success: false, 
+        error: { message: data?.error || 'Unknown error occurred' } 
+      };
     }
-
-    const data = await response.json();
-    return { success: true, data };
   } catch (error) {
     console.error('Error in sendWelcomeEmail:', error);
     return { 
