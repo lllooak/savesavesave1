@@ -38,16 +38,12 @@ export function FanSignup() {
       if (error || !data?.success) {
         throw new Error(error?.message || data?.error || 'Signup failed');
       }
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: form.email,
-        password: form.password,
-      });
-      if (signInError) {
-        throw signInError;
-      }
+      
       await sendWelcomeEmail(form.email, form.name);
-      toast.success('Signup successful');
-      navigate('/dashboard/fan');
+      toast.success('Registration successful! Please check your email to verify your account.');
+      
+      // Redirect to login page with verification message
+      navigate(`/login?verification=true&email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
       toast.error(err.message || 'Signup failed');
     } finally {
