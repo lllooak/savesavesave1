@@ -15,6 +15,14 @@ Deno.serve(async (req) => {
     // Get request data
     const { requestId, fanEmail, fanName, creatorEmail, creatorName, orderType, orderPrice, orderMessage, recipient } = await req.json()
 
+    console.log('Processing order notification request:', {
+      requestId,
+      fanEmail: !!fanEmail,
+      creatorEmail: !!creatorEmail,
+      orderType,
+      orderPrice
+    })
+
     // If requestId is provided, fetch the request details
     let requestData = null
     let fanData = null
@@ -28,7 +36,8 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Supabase credentials are not configured'
+          error: 'Supabase credentials are not configured',
+          code: 'missing_supabase_config'
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -62,7 +71,8 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             success: false,
-            error: `Error fetching request: ${requestError.message}`
+            error: `Error fetching request: ${requestError.message}`,
+            code: 'request_fetch_error'
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -114,7 +124,7 @@ Deno.serve(async (req) => {
     console.log('Environment check:', {
       resendApiKey: !!resendApiKey,
       fromEmail,
-      allEnvVars: Object.keys(Deno.env.toObject())
+      envVarCount: Object.keys(Deno.env.toObject()).length
     })
 
     if (!resendApiKey) {
@@ -123,6 +133,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ 
           success: false, 
           error: 'Email service not configured - missing API key',
+          code: 'missing_resend_config',
           debug: {
             availableEnvVars: Object.keys(Deno.env.toObject()),
             resendApiKey: !!resendApiKey,
@@ -150,6 +161,7 @@ Deno.serve(async (req) => {
     let creatorEmailError = null
     if (creatorData?.email) {
       try {
+        console.log('Sending email to creator:', creatorData.email)
         const creatorEmailResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -209,6 +221,7 @@ Deno.serve(async (req) => {
     let fanEmailError = null
     if (fanData?.email) {
       try {
+        console.log('Sending email to fan:', fanData.email)
         const fanEmailResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -263,23 +276,32 @@ Deno.serve(async (req) => {
     }
 
     // Return success even if emails failed, but include error details
+    const response = {
+      success: true,
+      creatorEmailSent,
+      fanEmailSent,
+      message: 'Order notification processed',
+      errors: {
+        creatorEmailError,
+        fanEmailError
+      },
+      debug: {
+        hasResendApiKey: !!resendApiKey,
+        fromEmail,
+        creatorEmail: creatorData?.email,
+        fanEmail: fanData?.email
+      }
+    }
+
+    console.log('Returning response:', {
+      success: response.success,
+      creatorEmailSent: response.creatorEmailSent,
+      fanEmailSent: response.fanEmailSent,
+      hasErrors: !!(response.errors.creatorEmailError || response.errors.fanEmailError)
+    })
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        creatorEmailSent,
-        fanEmailSent,
-        message: 'Order notification processed',
-        errors: {
-          creatorEmailError,
-          fanEmailError
-        },
-        debug: {
-          hasResendApiKey: !!resendApiKey,
-          fromEmail,
-          creatorEmail: creatorData?.email,
-          fanEmail: fanData?.email
-        }
-      }),
+      JSON.stringify(response),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -291,6 +313,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: false,
         error: error.message || 'An unexpected error occurred',
+        code: 'unexpected_error',
         stack: error.stack
       }),
       {

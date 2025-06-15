@@ -180,8 +180,9 @@ export function VideoAdDetails() {
       if (creatorError) {
         console.error('Error fetching creator email:', creatorError);
       } else {
-        // Send email notifications
+        // Send email notifications - don't let email failures block the order
         try {
+          console.log('Attempting to send order emails...');
           const emailResult = await sendOrderEmails({
             fanEmail: userData.email,
             fanName: userData.name || user.user_metadata?.name || 'Fan',
@@ -195,10 +196,14 @@ export function VideoAdDetails() {
           });
 
           if (!emailResult?.success) {
-            console.error('Error sending order emails:', emailResult?.error);
+            console.warn('Email notification failed, but order was successful:', emailResult?.error);
+            // Don't show error to user since the order was successful
+          } else {
+            console.log('Order emails sent successfully');
           }
         } catch (emailError) {
-          console.error('Error sending order emails:', emailError);
+          console.warn('Email notification failed, but order was successful:', emailError);
+          // Don't show error to user since the order was successful
         }
       }
 

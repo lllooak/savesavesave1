@@ -354,6 +354,8 @@ export async function sendOrderEmails(options: {
   recipient?: string;
 }) {
   try {
+    console.log('Invoking send-order-notification edge function...');
+    
     const { data, error } = await supabase.functions.invoke('send-order-notification', {
       body: {
         requestId: options.orderId,
@@ -370,31 +372,95 @@ export async function sendOrderEmails(options: {
 
     if (error) {
       console.error('Edge function error:', error);
-      return { success: false, error };
+      
+      // Check if it's a FunctionsHttpError with status information
+      if (error.message && error.message.includes('non-2xx')) {
+        console.error('Edge function returned non-2xx status code');
+        return { 
+          success: false, 
+          error: {
+            message: 'Email service temporarily unavailable',
+            code: 'edge_function_error',
+            details: error
+          }
+        };
+      }
+      
+      return { 
+        success: false, 
+        error: {
+          message: 'Failed to send email notifications',
+          code: 'edge_function_error',
+          details: error
+        }
+      };
     }
 
+    console.log('Edge function response:', data);
     return data as { success: boolean; [key: string]: any };
   } catch (err) {
     console.error('Error invoking send-order-notification:', err);
-    return { success: false, error: err };
+    
+    // Handle network errors or other exceptions
+    return { 
+      success: false, 
+      error: {
+        message: 'Network error while sending email notifications',
+        code: 'network_error',
+        details: err
+      }
+    };
   }
 }
 
 // Invoke Supabase Edge Function to send order notifications to fan and creator
 export async function sendOrderNotification(requestId: string) {
   try {
+    console.log('Invoking send-order-notification edge function with requestId:', requestId);
+    
     const { data, error } = await supabase.functions.invoke('send-order-notification', {
       body: { requestId }
     });
 
     if (error) {
       console.error('Edge function error:', error);
-      return { success: false, error };
+      
+      // Check if it's a FunctionsHttpError with status information
+      if (error.message && error.message.includes('non-2xx')) {
+        console.error('Edge function returned non-2xx status code');
+        return { 
+          success: false, 
+          error: {
+            message: 'Email service temporarily unavailable',
+            code: 'edge_function_error',
+            details: error
+          }
+        };
+      }
+      
+      return { 
+        success: false, 
+        error: {
+          message: 'Failed to send email notifications',
+          code: 'edge_function_error',
+          details: error
+        }
+      };
     }
 
+    console.log('Edge function response:', data);
     return data as { success: boolean; [key: string]: any };
   } catch (err) {
     console.error('Error invoking send-order-notification:', err);
-    return { success: false, error: err };
+    
+    // Handle network errors or other exceptions
+    return { 
+      success: false, 
+      error: {
+        message: 'Network error while sending email notifications',
+        code: 'network_error',
+        details: err
+      }
+    };
   }
 }
