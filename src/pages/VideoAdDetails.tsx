@@ -125,7 +125,7 @@ export function VideoAdDetails() {
       // Check user wallet balance
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('wallet_balance')
+        .select('wallet_balance, email, name')
         .eq('id', user.id)
         .single();
 
@@ -170,14 +170,36 @@ export function VideoAdDetails() {
       // Track affiliate booking if applicable
       await trackAffiliateBooking(user.id, request.id, ad.price);
 
-      // Trigger server-side email notifications
-      try {
-        const result = await sendOrderNotification(request.id);
-        if (!result?.success) {
-          console.error('send-order-notification failed:', result?.error);
+      // Get creator email
+      const { data: creatorData, error: creatorError } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', ad.creator.id)
+        .single();
+
+      if (creatorError) {
+        console.error('Error fetching creator email:', creatorError);
+      } else {
+        // Send email notifications
+        try {
+          const emailResult = await sendOrderEmails({
+            fanEmail: userData.email,
+            fanName: userData.name || user.user_metadata?.name || 'Fan',
+            creatorEmail: creatorData.email,
+            creatorName: ad.creator.name,
+            requestType: formData.request_type,
+            orderId: request.id,
+            price: ad.price,
+            message: formData.message,
+            recipient: formData.recipient
+          });
+
+          if (!emailResult?.success) {
+            console.error('Error sending order emails:', emailResult?.error);
+          }
+        } catch (emailError) {
+          console.error('Error sending order emails:', emailError);
         }
-      } catch (emailError) {
-        console.error('Error sending order notifications:', emailError);
       }
 
       toast.success('ההזמנה בוצעה בהצלחה!');

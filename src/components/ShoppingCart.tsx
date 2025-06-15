@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '../utils/currency';
+import { sendOrderEmails } from '../lib/emailService';
 
 interface CartItem {
   id: string;
@@ -44,7 +45,7 @@ export function ShoppingCart({ isOpen, onClose, items, onRemoveItem, onClearCart
       // Check user's wallet balance
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('wallet_balance')
+        .select('wallet_balance, email, name')
         .eq('id', user.id)
         .single();
 
@@ -87,6 +88,32 @@ export function ShoppingCart({ isOpen, onClose, items, onRemoveItem, onClearCart
 
           if (error || !data?.success) {
             throw new Error(error?.message || data?.error || 'Failed to process payment');
+          }
+
+          // Get creator email for notification
+          const { data: creatorData, error: creatorError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', item.creator_id)
+            .single();
+
+          if (!creatorError && creatorData?.email) {
+            // Send email notification
+            try {
+              await sendOrderEmails({
+                fanEmail: userData.email,
+                fanName: userData.name || user.user_metadata?.name || 'Fan',
+                creatorEmail: creatorData.email,
+                creatorName: item.creator_name,
+                requestType: 'video_ad',
+                orderId: request.id,
+                price: item.price,
+                message: message || `Purchase of video ad: ${item.title}`
+              });
+            } catch (emailError) {
+              console.error('Error sending order emails:', emailError);
+              // Continue with the checkout even if email fails
+            }
           }
 
           return data;
