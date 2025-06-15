@@ -1,12 +1,11 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'npm:@supabase/supabase-js'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -21,10 +20,11 @@ serve(async (req) => {
     let fanData = null
     let creatorData = null
     
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     
     if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase credentials:', { supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseKey })
       return new Response(
         JSON.stringify({
           success: false,
@@ -107,16 +107,27 @@ serve(async (req) => {
       }
     }
 
-    // Get Resend API key from environment
-    const resendApiKey = Deno.env.get('RESEND_API_KEY')
-    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'orders@mystar.co.il'
+    // Get Resend API key from environment - check multiple possible variable names
+    const resendApiKey = Deno.env.get('RESEND_API_KEY') || Deno.env.get('VITE_RESEND_API_KEY')
+    const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || Deno.env.get('VITE_RESEND_FROM_EMAIL') || 'orders@mystar.co.il'
+
+    console.log('Environment check:', {
+      resendApiKey: !!resendApiKey,
+      fromEmail,
+      allEnvVars: Object.keys(Deno.env.toObject())
+    })
 
     if (!resendApiKey) {
-      console.error('RESEND_API_KEY not configured')
+      console.error('RESEND_API_KEY not configured in environment variables')
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Email service not configured' 
+          error: 'Email service not configured - missing API key',
+          debug: {
+            availableEnvVars: Object.keys(Deno.env.toObject()),
+            resendApiKey: !!resendApiKey,
+            fromEmail
+          }
         }),
         { 
           status: 500, 
@@ -136,6 +147,7 @@ serve(async (req) => {
 
     // Send email to creator
     let creatorEmailSent = false
+    let creatorEmailError = null
     if (creatorData?.email) {
       try {
         const creatorEmailResponse = await fetch('https://api.resend.com/emails', {
@@ -181,16 +193,20 @@ serve(async (req) => {
         if (!creatorEmailResponse.ok) {
           const errorData = await creatorEmailResponse.json()
           console.error('Error sending creator email:', errorData)
+          creatorEmailError = errorData
         } else {
           creatorEmailSent = true
+          console.log('Creator email sent successfully')
         }
       } catch (emailError) {
         console.error('Error sending creator email:', emailError)
+        creatorEmailError = emailError.message
       }
     }
 
     // Send confirmation email to fan
     let fanEmailSent = false
+    let fanEmailError = null
     if (fanData?.email) {
       try {
         const fanEmailResponse = await fetch('https://api.resend.com/emails', {
@@ -235,20 +251,34 @@ serve(async (req) => {
         if (!fanEmailResponse.ok) {
           const errorData = await fanEmailResponse.json()
           console.error('Error sending fan email:', errorData)
+          fanEmailError = errorData
         } else {
           fanEmailSent = true
+          console.log('Fan email sent successfully')
         }
       } catch (emailError) {
         console.error('Error sending fan email:', emailError)
+        fanEmailError = emailError.message
       }
     }
 
+    // Return success even if emails failed, but include error details
     return new Response(
       JSON.stringify({
         success: true,
         creatorEmailSent,
         fanEmailSent,
-        message: 'Order notification processed'
+        message: 'Order notification processed',
+        errors: {
+          creatorEmailError,
+          fanEmailError
+        },
+        debug: {
+          hasResendApiKey: !!resendApiKey,
+          fromEmail,
+          creatorEmail: creatorData?.email,
+          fanEmail: fanData?.email
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -260,7 +290,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'An unexpected error occurred'
+        error: error.message || 'An unexpected error occurred',
+        stack: error.stack
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
