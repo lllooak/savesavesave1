@@ -109,16 +109,19 @@ export function CreatorSignup() {
         throw authError;
       }
 
+      // Create user record in the database
+      if (authData.user) {
+        await createUserRecord(authData.user.id);
+        await createCreatorProfile(authData.user.id);
+      }
+
       // Check if email confirmation is required
       if (authData.user && !authData.user.confirmed_at) {
         // Show success message with verification instructions
         setSignupComplete(true);
         toast.success('Registration successful! Please check your email to verify your account.');
       } else {
-        // If email confirmation is not required, create creator profile
-        await createCreatorProfile(authData.user?.id);
-        
-        // Sign in the user
+        // If email confirmation is not required, sign in the user
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email: form.email,
           password: form.password,
@@ -138,9 +141,27 @@ export function CreatorSignup() {
     }
   };
 
-  const createCreatorProfile = async (userId: string | undefined) => {
-    if (!userId) return;
-    
+  const createUserRecord = async (userId: string) => {
+    try {
+      // Create user record
+      const { error: userError } = await supabase
+        .from('users')
+        .upsert({
+          id: userId,
+          email: form.email,
+          name: form.name,
+          role: 'creator'
+        });
+        
+      if (userError) {
+        console.error('Error creating user record:', userError);
+      }
+    } catch (error) {
+      console.error('Error in createUserRecord:', error);
+    }
+  };
+
+  const createCreatorProfile = async (userId: string) => {
     try {
       // Check if profile already exists
       const { data: existingProfile } = await supabase
@@ -168,20 +189,6 @@ export function CreatorSignup() {
         
       if (profileError) {
         console.error('Error creating creator profile:', profileError);
-      }
-      
-      // Create user record if it doesn't exist
-      const { error: userError } = await supabase
-        .from('users')
-        .upsert({
-          id: userId,
-          email: form.email,
-          name: form.name,
-          role: 'creator'
-        });
-        
-      if (userError) {
-        console.error('Error creating user record:', userError);
       }
     } catch (error) {
       console.error('Error in createCreatorProfile:', error);

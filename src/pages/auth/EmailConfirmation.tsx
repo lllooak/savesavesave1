@@ -55,15 +55,43 @@ export function EmailConfirmation() {
           
           if (user) {
             // Check if user is a creator
+            const { data: userData } = await supabase
+              .from('users')
+              .select('role')
+              .eq('id', user.id)
+              .maybeSingle();
+              
+            const userRole = userData?.role || user.user_metadata?.role || 'user';
+            
+            // Check if user has a creator profile
             const { data: creatorProfile } = await supabase
               .from('creator_profiles')
               .select('id')
               .eq('id', user.id)
               .maybeSingle();
               
+            // If user doesn't have a creator profile but has creator role, create one
+            if (userRole === 'creator' && !creatorProfile) {
+              const category = user.user_metadata?.category || 'artist';
+              const name = user.user_metadata?.name || user.email?.split('@')[0] || 'Creator';
+              
+              await supabase
+                .from('creator_profiles')
+                .insert({
+                  id: user.id,
+                  name: name,
+                  category: category,
+                  bio: '',
+                  price: 100, // Default price
+                  active: true
+                });
+            }
+            
             // Redirect based on user role
             setTimeout(() => {
-              if (creatorProfile) {
+              if (userRole === 'admin') {
+                navigate('/dashboard/Joseph999');
+              } else if (userRole === 'creator') {
                 navigate('/dashboard/creator');
               } else {
                 navigate('/dashboard/fan');

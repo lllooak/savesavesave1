@@ -308,7 +308,24 @@ export function Login() {
           if (creatorProfile) {
             navigate('/dashboard/creator');
           } else {
-            navigate('/dashboard/fan');
+            // Create a creator profile if it doesn't exist
+            const { error: createProfileError } = await supabase
+              .from('creator_profiles')
+              .insert({
+                id: user.id,
+                name: user.user_metadata?.name || existingUser.name || 'Creator',
+                category: user.user_metadata?.category || 'artist',
+                bio: '',
+                price: 100, // Default price
+                active: true
+              });
+              
+            if (createProfileError) {
+              console.error('Error creating creator profile:', createProfileError);
+              navigate('/dashboard/fan');
+            } else {
+              navigate('/dashboard/creator');
+            }
           }
         } else {
           navigate('/dashboard/fan');
