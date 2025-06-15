@@ -293,13 +293,23 @@ export function Login() {
         if (userRole === 'admin') {
           navigate('/dashboard/Joseph999');
         } else if (userRole === 'creator') {
-          const { data: creatorProfile } = await supabase
+          // Check if the user has a creator profile
+          const { data: creatorProfile, error: creatorError } = await supabase
             .from('creator_profiles')
             .select('id')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
 
-          navigate(creatorProfile ? '/dashboard/creator' : '/dashboard/fan');
+          if (creatorError) {
+            console.error('Error checking creator profile:', creatorError);
+          }
+
+          // If they have a creator profile, send them to creator dashboard, otherwise to fan dashboard
+          if (creatorProfile) {
+            navigate('/dashboard/creator');
+          } else {
+            navigate('/dashboard/fan');
+          }
         } else {
           navigate('/dashboard/fan');
         }
