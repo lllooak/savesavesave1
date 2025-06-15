@@ -134,14 +134,26 @@ export async function trackAffiliateSignup(userId: string) {
 // Function to track booking through affiliate
 export async function trackAffiliateBooking(userId: string, requestId: string, amount: number) {
   try {
-    // Check if user was referred by an affiliate
+    // First, get the user's referrer_id
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('referrer_id, referrer:referrer_id(affiliate_tier)')
+      .select('referrer_id')
       .eq('id', userId)
       .single();
     
     if (userError || !userData?.referrer_id) {
+      return false;
+    }
+    
+    // Then, get the referrer's affiliate_tier
+    const { data: referrerData, error: referrerError } = await supabase
+      .from('users')
+      .select('affiliate_tier')
+      .eq('id', userData.referrer_id)
+      .single();
+    
+    if (referrerError) {
+      console.error('Error fetching referrer data:', referrerError);
       return false;
     }
     
@@ -166,7 +178,7 @@ export async function trackAffiliateBooking(userId: string, requestId: string, a
     }
     
     // Get commission rate based on affiliate tier
-    const commissionRate = getCommissionRate(userData.referrer?.affiliate_tier || 'bronze');
+    const commissionRate = getCommissionRate(referrerData?.affiliate_tier || 'bronze');
     
     // Calculate commission amount based on tier
     const commissionAmount = amount * commissionRate;

@@ -7,7 +7,7 @@ import { formatCurrency } from '../utils/currency';
 import toast from 'react-hot-toast';
 import { BookingForm, BookingFormData } from '../components/BookingForm';
 import { trackAffiliateBooking } from '../utils/affiliate';
-import { sendOrderNotification } from '../lib/emailService';
+import { sendOrderNotification, sendOrderEmails } from '../lib/emailService';
 
 interface VideoAd {
   id: string;
