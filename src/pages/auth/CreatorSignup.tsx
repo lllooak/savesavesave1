@@ -99,7 +99,7 @@ export function CreatorSignup() {
           data: {
             name: form.name,
             role: 'creator',
-            category: form.category,
+            category: getCategoryValue(form.category),
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`
         }
@@ -117,6 +117,17 @@ export function CreatorSignup() {
       } else {
         // If email confirmation is not required, create creator profile
         await createCreatorProfile(authData.user?.id);
+        
+        // Sign in the user
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
+        
+        if (signInError) {
+          throw signInError;
+        }
+        
         toast.success('Signup successful');
         navigate('/dashboard/creator');
       }
@@ -149,7 +160,7 @@ export function CreatorSignup() {
         .insert({
           id: userId,
           name: form.name,
-          category: form.category,
+          category: getCategoryValue(form.category),
           bio: '',
           price: 100, // Default price
           active: true
@@ -278,7 +289,7 @@ export function CreatorSignup() {
                   {categories.map((category) => (
                     <option 
                       key={category.id} 
-                      value={getCategoryValue(category.name)}
+                      value={category.name}
                     >
                       {category.icon} {category.name}
                     </option>
