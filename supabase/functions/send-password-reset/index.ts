@@ -118,12 +118,17 @@ serve(async (req) => {
     }
 
     console.log('User found, generating password reset link')
+    
+    // Determine the correct redirect URL
+    const finalRedirectTo = redirectTo || 'https://mystar.co.il/reset-password'
+    console.log('Using redirect URL:', finalRedirectTo)
+    
     // Generate password reset link
     const { data, error } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email,
       options: {
-        redirectTo: redirectTo || `${new URL(req.url).origin.replace('functions', 'www')}/reset-password`
+        redirectTo: finalRedirectTo
       }
     })
 

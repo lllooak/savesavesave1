@@ -201,7 +201,10 @@ export async function sendPasswordResetEmail(email: string) {
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
       
       const { data, error } = await supabase.functions.invoke('send-password-reset', {
-        body: { email, redirectTo },
+        body: { 
+          email, 
+          redirectTo: 'https://mystar.co.il/reset-password' // Use absolute URL
+        },
         signal: controller.signal
       });
 
@@ -281,7 +284,7 @@ export async function sendPasswordResetEmail(email: string) {
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: redirectTo
+        redirectTo: 'https://mystar.co.il/reset-password' // Use absolute URL
       });
       
       clearTimeout(timeoutId);

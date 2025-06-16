@@ -160,19 +160,11 @@ export function Login() {
       console.error('Password reset error:', error);
       setResetPasswordStatus('error');
       setResetPasswordError(error.message || 'שגיאה בלתי צפויה');
+      toast.error(error.message || 'שגיאה בלתי צפויה');
       
-      // Set extended cooldown for any error
-      setCooldownTime(300); // 5 minutes
-      
-      if (error.message && (
-        error.message.includes('rate limit') || 
-        error.message.includes('security purposes') || 
-        error.message.includes('המתן') ||
-        error.message.includes('after 0 seconds')
-      )) {
-        toast.error('יותר מדי בקשות. אנא המתן 5 דקות ונסה שוב.');
-      } else {
-        toast.error('שגיאת רשת או שירות. אנא בדוק את החיבור לאינטרנט ונסה שוב מאוחר יותר.');
+      // Set cooldown if it's a rate limit error
+      if (error.message && (error.message.includes('rate limit') || error.message.includes('security purposes') || error.message.includes('המתן'))) {
+        setCooldownTime(300);
       }
     } finally {
       setIsLoading(false);
