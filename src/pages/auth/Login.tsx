@@ -126,6 +126,8 @@ export function Login() {
     setCooldownTime(30); // 30 seconds initial cooldown
     
     try {
+      console.log('Sending password reset email to:', formData.email);
+      
       // Try using the edge function
       const result = await sendPasswordResetEmail(formData.email);
       

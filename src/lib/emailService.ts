@@ -71,6 +71,7 @@ export async function resendVerificationEmail(email: string) {
 
     // Try using the Edge Function first
     try {
+      console.log('Attempting to use edge function for verification email');
       const { data, error } = await supabase.functions.invoke('send-verification-email', {
         body: { email, redirectTo }
       });
@@ -150,6 +151,8 @@ function isValidEmailForPasswordReset(email: string): boolean {
 // Function to send a password reset email
 export async function sendPasswordResetEmail(email: string) {
   try {
+    console.log('Attempting to send password reset email to:', email);
+    
     // Validate email format first
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -273,6 +276,7 @@ export async function sendPasswordResetEmail(email: string) {
 
     // Standard Supabase method as fallback
     try {
+      console.log('Falling back to direct Supabase resetPasswordForEmail method');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
