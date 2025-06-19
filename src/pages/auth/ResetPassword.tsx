@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Key, Loader, CheckCircle } from 'lucide-react';
+import { Key, Loader, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function ResetPassword() {
@@ -12,6 +12,7 @@ export function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +83,28 @@ export function ResetPassword() {
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
             <h2 className="mt-4 text-2xl font-bold text-gray-900">הסיסמה עודכנה בהצלחה!</h2>
             <p className="mt-2 text-gray-600">הסיסמה שלך עודכנה בהצלחה. אתה מועבר לדף ההתחברות...</p>
+            <div className="mt-6">
+              <button
+                onClick={() => navigate('/login')}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                חזרה לדף ההתחברות
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tokenError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4" dir="rtl">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <div className="text-center">
+            <XCircle className="h-16 w-16 text-red-500 mx-auto" />
+            <h2 className="mt-4 text-2xl font-bold text-gray-900">קישור לא תקף</h2>
+            <p className="mt-2 text-gray-600">{tokenError}</p>
             <div className="mt-6">
               <button
                 onClick={() => navigate('/login')}
