@@ -1,17 +1,124 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, handleAuthCallback } from '../../lib/supabase';
 import { Key, Loader, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function ResetPassword() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [hasResetToken, setHasResetToken] = useState(false);
+
+  // Check if user has a valid reset token
+  useEffect(() => {
+    const checkResetToken = async () => {
+      try {
+        setCheckingSession(true);
+        
+        // Check URL parameters for token
+        const urlParams = new URLSearchParams(location.search);
+        const token = urlParams.get('token');
+        const type = urlParams.get('type');
+        const hash = location.hash;
+        
+        console.log('Reset password page loaded with:', { 
+          token: token ? 'present' : 'not present', 
+          type, 
+          hash: hash ? 'present' : 'not present',
+          search: location.search,
+          pathname: location.pathname
+        });
+        
+        // Check if we have a recovery token in the hash
+        const hashParams = new URLSearchParams(hash.replace('#', ''));
+        const hashType = hashParams.get('type');
+        const hashAccessToken = hashParams.get('access_token');
+        const hashRefreshToken = hashParams.get('refresh_token');
+        
+        // If we have a recovery token in the hash, we're good to go
+        if (hashType === 'recovery' && hashAccessToken && hashRefreshToken) {
+          console.log('Found recovery tokens in hash');
+          setHasResetToken(true);
+          
+          // Set the session with the tokens
+          const { data, error } = await supabase.auth.setSession({
+            access_token: hashAccessToken,
+            refresh_token: hashRefreshToken
+          });
+          
+          if (error) {
+            console.error('Error setting session from hash tokens:', error);
+            setError('שגיאה באימות הקישור לאיפוס הסיסמה');
+            setHasResetToken(false);
+          } else {
+            console.log('Session set successfully from hash tokens');
+            setHasResetToken(true);
+            
+            // Clean up the URL by removing the hash
+            window.history.replaceState(null, '', location.pathname + location.search);
+          }
+          
+          return;
+        }
+        
+        // If we have token and type in URL, verify it
+        if (token && type === 'recovery') {
+          try {
+            console.log('Verifying recovery token from URL params');
+            // Verify the token
+            const { error } = await supabase.auth.verifyOtp({
+              token_hash: token,
+              type: 'recovery'
+            });
+            
+            if (error) {
+              console.error('Error verifying token:', error);
+              setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו');
+              setHasResetToken(false);
+            } else {
+              console.log('Token verified successfully');
+              setHasResetToken(true);
+            }
+          } catch (error) {
+            console.error('Error verifying token:', error);
+            setError('שגיאה באימות הקישור לאיפוס הסיסמה');
+            setHasResetToken(false);
+          }
+        } else {
+          // Check if we have a valid session
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session) {
+            console.log('User has an active session');
+            setHasResetToken(true);
+          } else {
+            console.log('No active session or recovery token found');
+            setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו');
+            setHasResetToken(false);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking reset token:', error);
+        setError('שגיאה בבדיקת טוקן איפוס הסיסמה');
+        setHasResetToken(false);
+      } finally {
+        setCheckingSession(false);
+      }
+    };
+    
+    // Only check for reset token if we haven't already succeeded
+    if (!success) {
+      checkResetToken();
+    } else {
+      setCheckingSession(false);
+    }
+  }, [location, navigate, success]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,32 +137,17 @@ export function ResetPassword() {
       setLoading(true);
       setError(null);
       
-      // Extract tokens from hash
-      const hash = location.hash;
-      const hashParams = new URLSearchParams(hash.substring(1));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      
-      if (!accessToken || !refreshToken) {
-        throw new Error('חסרים פרטי אימות בקישור');
-      }
-      
-      // Set the session with the tokens
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
-      
-      if (sessionError) throw sessionError;
-      
       // Update the password
       const { error } = await supabase.auth.updateUser({
         password: password
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating password:', error);
+        throw error;
+      }
       
-      // Mark as success
+      // Mark as success immediately to prevent further token checks
       setSuccess(true);
       toast.success('הסיסמה עודכנה בהצלחה!');
       
@@ -74,6 +166,20 @@ export function ResetPassword() {
     }
   };
 
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4" dir="rtl">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <div className="text-center">
+            <Loader className="h-16 w-16 text-primary-600 mx-auto animate-spin" />
+            <h2 className="mt-4 text-2xl font-bold text-gray-900">טוען...</h2>
+            <p className="mt-2 text-gray-600">אנא המתן בזמן שאנו מעבדים את הבקשה שלך.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (success) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4" dir="rtl">
@@ -82,6 +188,28 @@ export function ResetPassword() {
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
             <h2 className="mt-4 text-2xl font-bold text-gray-900">הסיסמה עודכנה בהצלחה!</h2>
             <p className="mt-2 text-gray-600">הסיסמה שלך עודכנה בהצלחה. אתה מועבר לדף ההתחברות...</p>
+            <div className="mt-6">
+              <button
+                onClick={() => navigate('/login')}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                חזרה לדף ההתחברות
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasResetToken && !success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4" dir="rtl">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <div className="text-center">
+            <XCircle className="h-16 w-16 text-red-500 mx-auto" />
+            <h2 className="mt-4 text-2xl font-bold text-gray-900">קישור לא תקף</h2>
+            <p className="mt-2 text-gray-600">{error || 'הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו.'}</p>
             <div className="mt-6">
               <button
                 onClick={() => navigate('/login')}
