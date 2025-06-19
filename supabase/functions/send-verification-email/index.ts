@@ -1,129 +1,127 @@
-// Follow the edge function format
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.39.7";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+interface RequestBody {
+  email: string;
+  redirectTo?: string;
 }
 
 serve(async (req) => {
   // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
   }
 
   try {
-    const { email, redirectTo } = await req.json()
+    // Get environment variables
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing environment variables");
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Server configuration error",
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Create Supabase admin client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Parse request body
+    const { email, redirectTo } = await req.json() as RequestBody;
 
     if (!email) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Email is required'
+          error: "Email is required",
         }),
         {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
-      )
+      );
     }
 
-    // Get Supabase client from environment variables
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // Set default redirect URL if not provided
+    const finalRedirectTo = redirectTo || 'https://mystar.co.il/auth/callback';
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Supabase environment variables not configured'
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        }
-      )
-    }
-
-    // Create Supabase client
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+    console.log(`Sending verification email to ${email} with redirect to ${finalRedirectTo}`);
 
     // Send verification email
-    const { error } = await supabaseClient.auth.admin.generateLink({
+    const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
       options: {
-        redirectTo: redirectTo || `${new URL(req.url).origin}/auth/callback`
+        emailRedirectTo: finalRedirectTo
       }
-    })
+    });
 
     if (error) {
-      console.error('Error sending verification email:', error)
+      console.error("Error sending verification email:", error);
+      
+      // For rate limiting errors, return a graceful response
+      if (error.message.includes("rate limit") || error.message.includes("Too many requests")) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            note: "Rate limited, but handled gracefully",
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      
       return new Response(
         JSON.stringify({
           success: false,
-          error: error.message
+          error: error.message,
         }),
         {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
-      )
+      );
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Verification email sent successfully'
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
-    )
+    );
   } catch (error) {
-    console.error('Error:', error)
+    console.error("Unexpected error:", error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message
+        error: error.message || "An unexpected error occurred",
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
-    )
+    );
   }
-})
-
-// Helper to create Supabase client
-function createClient(supabaseUrl: string, supabaseKey: string) {
-  return {
-    auth: {
-      admin: {
-        generateLink: async ({ type, email, options }: { type: string, email: string, options?: any }) => {
-          const url = `${supabaseUrl}/auth/v1/admin/generate_link`
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseKey}`,
-              'apikey': supabaseKey
-            },
-            body: JSON.stringify({
-              type,
-              email,
-              options
-            })
-          })
-
-          const data = await response.json()
-          if (!response.ok) {
-            return { error: data }
-          }
-          return { data }
-        }
-      }
-    }
-  }
-}
+});

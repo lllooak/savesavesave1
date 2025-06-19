@@ -8,8 +8,11 @@ const corsHeaders = {
 };
 
 interface RequestBody {
-  email: string;
-  redirectTo?: string;
+  affiliateCode: string;
+  visitorId: string;
+  ipAddress?: string;
+  userAgent?: string;
+  referralUrl?: string;
 }
 
 serve(async (req) => {
@@ -32,7 +35,6 @@ serve(async (req) => {
         JSON.stringify({
           success: false,
           error: "Server configuration error",
-          code: "service_config_error",
         }),
         {
           status: 500,
@@ -45,14 +47,18 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Parse request body
-    const { email, redirectTo } = await req.json() as RequestBody;
+    const { affiliateCode, visitorId, userAgent, referralUrl } = await req.json() as RequestBody;
+    
+    // Get IP address from request headers
+    const ipAddress = req.headers.get("x-forwarded-for") || 
+                      req.headers.get("x-real-ip") || 
+                      "unknown";
 
-    if (!email) {
+    if (!affiliateCode || !visitorId) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Email is required",
-          code: "missing_email",
+          error: "Affiliate code and visitor ID are required",
         }),
         {
           status: 400,
@@ -61,14 +67,20 @@ serve(async (req) => {
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    // Get affiliate ID from code
+    const { data: affiliateData, error: affiliateError } = await supabase
+      .from('affiliate_links')
+      .select('user_id')
+      .eq('code', affiliateCode)
+      .eq('is_active', true)
+      .single();
+
+    if (affiliateError) {
+      console.error("Error finding affiliate:", affiliateError);
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Invalid email format",
-          code: "invalid_email_format",
+          error: "Invalid affiliate code",
         }),
         {
           status: 400,
@@ -77,50 +89,55 @@ serve(async (req) => {
       );
     }
 
-    // Set default redirect URL if not provided
-    const finalRedirectTo = redirectTo || 'https://mystar.co.il/reset-password';
+    // Check if this visitor has already been tracked for this affiliate
+    const { data: existingVisit, error: existingVisitError } = await supabase
+      .from('affiliate_tracking')
+      .select('id')
+      .eq('affiliate_id', affiliateData.user_id)
+      .eq('visitor_id', visitorId)
+      .eq('event_type', 'visit')
+      .maybeSingle();
 
-    console.log(`Sending password reset email to ${email} with redirect to ${finalRedirectTo}`);
+    if (existingVisitError) {
+      console.error("Error checking existing visit:", existingVisitError);
+    }
 
-    // Send password reset email
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: finalRedirectTo,
-    });
+    // If this is a new visit, record it
+    if (!existingVisit) {
+      const { error: trackingError } = await supabase
+        .from('affiliate_tracking')
+        .insert({
+          affiliate_id: affiliateData.user_id,
+          event_type: 'visit',
+          visitor_id: visitorId,
+          ip_address: ipAddress,
+          user_agent: userAgent,
+          referral_url: referralUrl,
+          metadata: {
+            timestamp: new Date().toISOString()
+          }
+        });
 
-    if (error) {
-      console.error("Error sending password reset email:", error);
-      
-      // For rate limiting errors, return a graceful response
-      if (error.message.includes("rate limit") || 
-          error.message.includes("Too many requests") ||
-          error.message.includes("for security purposes")) {
+      if (trackingError) {
+        console.error("Error recording visit:", trackingError);
         return new Response(
           JSON.stringify({
-            success: true,
-            note: "Rate limited, but handled gracefully",
+            success: false,
+            error: "Failed to record visit",
           }),
           {
-            status: 200,
+            status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           }
         );
       }
-      
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: error.message,
-        }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
     }
 
     return new Response(
       JSON.stringify({
         success: true,
+        message: "Visit recorded successfully",
+        isNewVisit: !existingVisit
       }),
       {
         status: 200,
