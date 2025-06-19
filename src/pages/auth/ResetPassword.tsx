@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase, extractHashParams } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { Key, Loader, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -21,56 +21,66 @@ export function ResetPassword() {
       try {
         setCheckingSession(true);
         
-        // Check URL parameters for token
+        // Parse URL parameters and hash
         const urlParams = new URLSearchParams(location.search);
         const token = urlParams.get('token');
         const type = urlParams.get('type');
-        
-        // Check URL hash for tokens (this is the format Supabase uses for password reset)
         const hash = location.hash;
         
         console.log('Reset password page loaded with:', { 
-          hasHash: hash ? true : false,
-          hasToken: token ? true : false, 
-          type
+          hasHash: !!hash,
+          hashLength: hash ? hash.length : 0,
+          hasToken: !!token, 
+          type,
+          pathname: location.pathname
         });
         
-        // Extract tokens from hash fragment
-        const { accessToken, refreshToken, type: hashType } = extractHashParams();
-        
-        // If we have recovery tokens in the hash, we're good to go
-        if (accessToken && refreshToken && (hashType === 'recovery' || hash.includes('type=recovery'))) {
-          console.log('Found recovery tokens in hash');
+        // First try to handle the hash fragment directly
+        if (hash && hash.includes('access_token')) {
+          console.log('Found access_token in hash, attempting to process');
           
           try {
-            // Set the session with the tokens
-            const { data, error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken
-            });
+            // Extract tokens directly from hash
+            const hashParams = new URLSearchParams(hash.substring(1));
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+            const tokenType = hashParams.get('type');
             
-            if (error) {
-              console.error('Error setting session from hash tokens:', error);
-              setError('שגיאה באימות הקישור לאיפוס הסיסמה');
-              setHasResetToken(false);
+            if (accessToken && refreshToken && (tokenType === 'recovery' || hash.includes('type=recovery'))) {
+              console.log('Found valid recovery tokens in hash');
+              
+              // Set the session with the tokens
+              const { data, error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken
+              });
+              
+              if (error) {
+                console.error('Error setting session from hash tokens:', error);
+                setError('שגיאה באימות הקישור לאיפוס הסיסמה');
+                setHasResetToken(false);
+              } else {
+                console.log('Session set successfully from hash tokens');
+                setHasResetToken(true);
+                setCheckingSession(false);
+                return;
+              }
             } else {
-              console.log('Session set successfully from hash tokens');
-              setHasResetToken(true);
+              console.log('Invalid or incomplete tokens in hash', { 
+                hasAccessToken: !!accessToken,
+                hasRefreshToken: !!refreshToken,
+                tokenType
+              });
             }
-          } catch (error) {
-            console.error('Exception setting session:', error);
-            setError('שגיאה באימות הקישור לאיפוס הסיסמה');
-            setHasResetToken(false);
+          } catch (hashError) {
+            console.error('Error processing hash tokens:', hashError);
           }
-          
-          setCheckingSession(false);
-          return;
         }
         
-        // If we have token and type in URL, verify it
+        // If hash processing failed, try URL parameters
         if (token && type === 'recovery') {
+          console.log('Trying to verify recovery token from URL params');
           try {
-            console.log('Verifying recovery token from URL params');
             // Verify the token
             const { error } = await supabase.auth.verifyOtp({
               token_hash: token,
@@ -84,29 +94,35 @@ export function ResetPassword() {
             } else {
               console.log('Token verified successfully');
               setHasResetToken(true);
+              setCheckingSession(false);
+              return;
             }
           } catch (error) {
             console.error('Error verifying token:', error);
             setError('שגיאה באימות הקישור לאיפוס הסיסמה');
             setHasResetToken(false);
           }
+        }
+        
+        // Last resort: check if we have a valid session already
+        try {
+          console.log('Checking for existing session');
+          const { data: { session } } = await supabase.auth.getSession();
           
-          setCheckingSession(false);
-          return;
+          if (session) {
+            console.log('User has an active session');
+            setHasResetToken(true);
+            setCheckingSession(false);
+            return;
+          }
+        } catch (sessionError) {
+          console.error('Error checking session:', sessionError);
         }
         
-        // Check if we have a valid session
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session) {
-          console.log('User has an active session');
-          setHasResetToken(true);
-        } else {
-          console.log('No active session or recovery token found');
-          setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו. אנא בקש קישור חדש.');
-          setHasResetToken(false);
-        }
-        
+        // If we get here, we don't have a valid token
+        console.log('No valid reset token found');
+        setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו. אנא בקש קישור חדש.');
+        setHasResetToken(false);
         setCheckingSession(false);
       } catch (error) {
         console.error('Error checking reset token:', error);
@@ -251,7 +267,9 @@ export function ResetPassword() {
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               required
               disabled={loading}
+              minLength={6}
             />
+            <p className="mt-1 text-xs text-gray-500">הסיסמה חייבת להכיל לפחות 6 תווים</p>
           </div>
           
           <div>

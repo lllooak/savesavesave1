@@ -122,7 +122,7 @@ export async function testSupabaseConnection() {
 
 // Helper function to extract hash parameters
 export function extractHashParams() {
-  const hash = window.location.hash.replace('#', '');
+  const hash = window.location.hash.substring(1); // Remove the # character
   const params = new URLSearchParams(hash);
   
   return {
