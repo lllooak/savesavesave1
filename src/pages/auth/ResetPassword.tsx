@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { Key, Loader, CheckCircle, XCircle } from 'lucide-react';
+import { Key, Loader, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export function ResetPassword() {
