@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, extractHashParams } from '../../lib/supabase';
 import { Key, Loader, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -20,45 +20,46 @@ export function ResetPassword() {
     const checkResetToken = async () => {
       try {
         setCheckingSession(true);
-        console.log("Starting reset password flow check");
         
-        // Parse URL hash fragment
+        // Check URL parameters for token
+        const urlParams = new URLSearchParams(location.search);
+        const token = urlParams.get('token');
+        const type = urlParams.get('type');
+        
+        // Check URL hash for tokens (this is the format Supabase uses for password reset)
         const hash = location.hash;
-        console.log("URL hash:", hash ? "present" : "not present");
         
-        // Extract tokens from hash
-        const hashParams = new URLSearchParams(hash.replace('#', ''));
-        const accessToken = hashParams.get('access_token');
-        const refreshToken = hashParams.get('refresh_token');
-        const type = hashParams.get('type');
-        
-        console.log("Hash params:", { 
-          accessToken: accessToken ? "present" : "not present", 
-          refreshToken: refreshToken ? "present" : "not present",
+        console.log('Reset password page loaded with:', { 
+          hasHash: hash ? true : false,
+          hasToken: token ? true : false, 
           type
         });
         
-        if (accessToken && refreshToken && type === 'recovery') {
-          console.log("Found recovery tokens in hash");
+        // Extract tokens from hash fragment
+        const { accessToken, refreshToken, type: hashType } = extractHashParams();
+        
+        // If we have recovery tokens in the hash, we're good to go
+        if (accessToken && refreshToken && (hashType === 'recovery' || hash.includes('type=recovery'))) {
+          console.log('Found recovery tokens in hash');
           
-          // Set the session with the tokens
           try {
+            // Set the session with the tokens
             const { data, error } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken
             });
             
             if (error) {
-              console.error("Error setting session from tokens:", error);
-              setError("שגיאה בהגדרת הסשן. אנא נסה שוב או בקש קישור חדש לאיפוס סיסמה.");
+              console.error('Error setting session from hash tokens:', error);
+              setError('שגיאה באימות הקישור לאיפוס הסיסמה');
               setHasResetToken(false);
             } else {
-              console.log("Session set successfully");
+              console.log('Session set successfully from hash tokens');
               setHasResetToken(true);
             }
-          } catch (sessionError) {
-            console.error("Exception setting session:", sessionError);
-            setError("שגיאה בהגדרת הסשן. אנא נסה שוב או בקש קישור חדש לאיפוס סיסמה.");
+          } catch (error) {
+            console.error('Exception setting session:', error);
+            setError('שגיאה באימות הקישור לאיפוס הסיסמה');
             setHasResetToken(false);
           }
           
@@ -66,23 +67,50 @@ export function ResetPassword() {
           return;
         }
         
-        // Check if we have an active session
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session) {
-          console.log("User has an active session");
-          setHasResetToken(true);
+        // If we have token and type in URL, verify it
+        if (token && type === 'recovery') {
+          try {
+            console.log('Verifying recovery token from URL params');
+            // Verify the token
+            const { error } = await supabase.auth.verifyOtp({
+              token_hash: token,
+              type: 'recovery'
+            });
+            
+            if (error) {
+              console.error('Error verifying token:', error);
+              setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו');
+              setHasResetToken(false);
+            } else {
+              console.log('Token verified successfully');
+              setHasResetToken(true);
+            }
+          } catch (error) {
+            console.error('Error verifying token:', error);
+            setError('שגיאה באימות הקישור לאיפוס הסיסמה');
+            setHasResetToken(false);
+          }
+          
           setCheckingSession(false);
           return;
         }
         
-        console.log("No active session or recovery token found");
-        setError("הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו. אנא בקש קישור חדש.");
-        setHasResetToken(false);
+        // Check if we have a valid session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session) {
+          console.log('User has an active session');
+          setHasResetToken(true);
+        } else {
+          console.log('No active session or recovery token found');
+          setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו. אנא בקש קישור חדש.');
+          setHasResetToken(false);
+        }
+        
         setCheckingSession(false);
       } catch (error) {
-        console.error("Error in checkResetToken:", error);
-        setError("שגיאה בבדיקת טוקן איפוס הסיסמה. אנא נסה שוב מאוחר יותר.");
+        console.error('Error checking reset token:', error);
+        setError('שגיאה בבדיקת טוקן איפוס הסיסמה');
         setHasResetToken(false);
         setCheckingSession(false);
       }
