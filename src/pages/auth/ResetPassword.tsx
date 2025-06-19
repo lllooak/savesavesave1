@@ -13,76 +13,11 @@ export function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [hasResetToken, setHasResetToken] = useState(false);
 
-  // Check if user has a valid reset token
+  // Skip the token checking and go directly to password reset form
   useEffect(() => {
-    const checkResetToken = async () => {
-      try {
-        setCheckingSession(true);
-        
-        // Extract token from hash fragment
-        const hash = location.hash;
-        console.log('Hash fragment:', hash);
-        
-        if (hash && hash.includes('access_token') && hash.includes('type=recovery')) {
-          console.log('Found recovery tokens in hash');
-          
-          // Parse the hash to get the tokens
-          const hashParams = new URLSearchParams(hash.substring(1));
-          const accessToken = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
-          const type = hashParams.get('type');
-          
-          if (accessToken && refreshToken && type === 'recovery') {
-            // Set the session with the tokens
-            const { data, error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken
-            });
-            
-            if (error) {
-              console.error('Error setting session from hash tokens:', error);
-              setError('שגיאה באימות הקישור לאיפוס הסיסמה');
-              setHasResetToken(false);
-            } else {
-              console.log('Session set successfully from hash tokens');
-              setHasResetToken(true);
-            }
-          } else {
-            console.error('Missing required tokens in hash');
-            setError('קישור לא תקף או פג תוקף');
-            setHasResetToken(false);
-          }
-        } else {
-          // Check if we have a valid session
-          const { data: { session } } = await supabase.auth.getSession();
-          
-          if (session) {
-            console.log('User has an active session');
-            setHasResetToken(true);
-          } else {
-            console.log('No active session or recovery token found');
-            setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו');
-            setHasResetToken(false);
-          }
-        }
-      } catch (error) {
-        console.error('Error checking reset token:', error);
-        setError('שגיאה בבדיקת טוקן איפוס הסיסמה');
-        setHasResetToken(false);
-      } finally {
-        setCheckingSession(false);
-      }
-    };
-    
-    // Only check for reset token if we haven't already succeeded
-    if (!success) {
-      checkResetToken();
-    } else {
-      setCheckingSession(false);
-    }
-  }, [location, navigate, success]);
+    setCheckingSession(false);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,15 +36,30 @@ export function ResetPassword() {
       setLoading(true);
       setError(null);
       
+      // Extract tokens from hash
+      const hash = location.hash;
+      const hashParams = new URLSearchParams(hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      
+      if (!accessToken || !refreshToken) {
+        throw new Error('חסרים פרטי אימות בקישור');
+      }
+      
+      // Set the session with the tokens
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken
+      });
+      
+      if (sessionError) throw sessionError;
+      
       // Update the password
       const { error } = await supabase.auth.updateUser({
         password: password
       });
       
-      if (error) {
-        console.error('Error updating password:', error);
-        throw error;
-      }
+      if (error) throw error;
       
       // Mark as success immediately to prevent further token checks
       setSuccess(true);
@@ -152,28 +102,6 @@ export function ResetPassword() {
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
             <h2 className="mt-4 text-2xl font-bold text-gray-900">הסיסמה עודכנה בהצלחה!</h2>
             <p className="mt-2 text-gray-600">הסיסמה שלך עודכנה בהצלחה. אתה מועבר לדף ההתחברות...</p>
-            <div className="mt-6">
-              <button
-                onClick={() => navigate('/login')}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-              >
-                חזרה לדף ההתחברות
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!hasResetToken && !success) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4" dir="rtl">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-          <div className="text-center">
-            <XCircle className="h-16 w-16 text-red-500 mx-auto" />
-            <h2 className="mt-4 text-2xl font-bold text-gray-900">קישור לא תקף</h2>
-            <p className="mt-2 text-gray-600">{error || 'הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו.'}</p>
             <div className="mt-6">
               <button
                 onClick={() => navigate('/login')}
