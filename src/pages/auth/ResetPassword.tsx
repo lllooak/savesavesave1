@@ -165,7 +165,7 @@ export function ResetPassword() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4\" dir="rtl">
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4" dir="rtl">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
           <div className="text-center">
             <Loader className="h-16 w-16 text-primary-600 mx-auto animate-spin" />
