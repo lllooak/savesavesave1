@@ -20,32 +20,20 @@ export function ResetPassword() {
       try {
         setCheckingSession(true);
         
-        // Parse URL parameters for token
-        const urlParams = new URLSearchParams(location.search);
-        const token = urlParams.get('token');
-        const type = urlParams.get('type');
-        
-        console.log('Reset password page loaded with params:', { 
-          token: token ? 'present' : 'not present', 
-          type,
-          search: location.search,
-          pathname: location.pathname
-        });
-        
-        // Check for hash fragment which contains the tokens
-        if (location.hash) {
-          console.log('Hash fragment detected');
+        // Handle hash fragment directly
+        if (location.hash && location.hash.includes('access_token')) {
+          console.log('Processing hash fragment with tokens');
           
-          try {
-            // Extract tokens from hash
-            const hashParams = new URLSearchParams(location.hash.substring(1));
-            const accessToken = hashParams.get('access_token');
-            const refreshToken = hashParams.get('refresh_token');
-            const hashType = hashParams.get('type');
+          // Extract tokens from hash
+          const hashParams = new URLSearchParams(location.hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          const tokenType = hashParams.get('type');
+          
+          if (accessToken && refreshToken && tokenType === 'recovery') {
+            console.log('Found recovery tokens in hash, setting session');
             
-            if (accessToken && refreshToken && hashType === 'recovery') {
-              console.log('Found recovery tokens in hash');
-              
+            try {
               // Set the session with the tokens
               const { data, error } = await supabase.auth.setSession({
                 access_token: accessToken,
@@ -61,46 +49,20 @@ export function ResetPassword() {
                 setHasResetToken(true);
                 
                 // Clean up the URL by removing the hash
-                window.history.replaceState(null, '', location.pathname + location.search);
+                window.history.replaceState(null, '', location.pathname);
               }
-              
-              setCheckingSession(false);
-              return;
-            }
-          } catch (hashError) {
-            console.error('Error processing hash fragment:', hashError);
-          }
-        }
-        
-        // If we have token and type in URL, verify it
-        if (token && type === 'recovery') {
-          try {
-            console.log('Verifying recovery token from URL params');
-            // Verify the token
-            const { error } = await supabase.auth.verifyOtp({
-              token_hash: token,
-              type: 'recovery'
-            });
-            
-            if (error) {
-              console.error('Error verifying token:', error);
-              setError('הקישור לאיפוס הסיסמה אינו תקף או שפג תוקפו');
+            } catch (sessionError) {
+              console.error('Exception setting session:', sessionError);
+              setError('שגיאה בעיבוד נתוני האימות');
               setHasResetToken(false);
-            } else {
-              console.log('Token verified successfully');
-              setHasResetToken(true);
             }
-          } catch (error) {
-            console.error('Error verifying token:', error);
-            setError('שגיאה באימות הקישור לאיפוס הסיסמה');
-            setHasResetToken(false);
+            
+            setCheckingSession(false);
+            return;
           }
-          
-          setCheckingSession(false);
-          return;
         }
         
-        // Check if we have a valid session
+        // If no hash with tokens, check for a valid session
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session) {
